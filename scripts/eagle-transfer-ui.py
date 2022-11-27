@@ -8,10 +8,15 @@ import gradio as gr
 
 from modules import script_callbacks, extras, ui, generation_parameters_copypaste
 
-from scripts.eagleapi.application import info
-from scripts.eagleapi.item import addFromPaths
+from scripts.eagleapi import api_application
+from scripts.eagleapi import api_folder
+from scripts.eagleapi import api_item
+from scripts.eagleapi import api_util
 
+# Define
+Image.MAX_IMAGE_PIXELS = 1000000000
 DEBUG = False
+MAX_ITEM_IN_ONE_POST_ADDFROMPATHS = 10
 
 #
 # UI callback
@@ -23,7 +28,7 @@ def on_ui_tabs():
                 with gr.Column(scale=1):
                     btn_send_to_eagle = gr.Button("Send image(s) to Eagle", variant="primary")
                 with gr.Column(scale=3):
-                    html_current_status = gr.HTML(label="Current Status")
+                    html_current_status = gr.HTML()
             with gr.Row():
                 with gr.Column(scale=1):
                     btn_load_images = gr.Button("Load images")
@@ -33,14 +38,16 @@ def on_ui_tabs():
                         chk_show_searched_images = gr.Checkbox(label="Show searched images in gallery")
                     gr.HTML("<H1>Output Settings</H1>")
                     with gr.Group():
-                        # specify Eagle folderID
-                        txt_save_to_eagle_folderid = gr.Text(label="FolderID on Eagle (option)")
                         # flg: save generation info to annotation
                         chk_save_generationinfo_to_eagle_as_annotation = gr.Checkbox(value=True, label="Save Generation info as Annotation")
                         # flg: save positive prompt to tags
                         chk_save_positive_prompt_to_eagle_as_tags = gr.Checkbox(value=True, label="Save positive prompt to Eagle as tags")
                         # radio: save negative prompt to tags or "n:"
                         radio_save_negative_prompt_to_eagle_as = gr.Radio(label="Save negative prompt to Eagle as,", choices=["None", "tag", "n:tag"], value="n:tag", type="value")
+                        # specify Eagle folderID
+                        txt_destination_eagle_folder = gr.Text(label="Destination Folder Name or ID on Eagle (option)")
+                        # radio: about folder
+                        radio_allow_create_new_folder = gr.Radio(label="Allow create new folder on Eagle", choices=["Not allow", "allow"], value="Not allow", type="index")
 
                     with gr.Group():
                         # Hidden items
@@ -199,16 +206,20 @@ def on_ui_tabs():
                     tags += [ x.strip() for x in neg_prompt.split(",") if x.strip() != "" ]
                 elif radio_save_negative_prompt_to_eagle_as == "n:tag":
                     tags += [ f"n:{x.strip()}" for x in neg_prompt.split(",") if x.strip() != "" ]
-                _ret_eagle_list.append(addFromPaths.EAGLE_ITEM(filefullpath=fullfn, filename=filename, website="", tags=tags, annotation=annotation))
+                _ret_eagle_list.append(api_item.EAGLE_ITEM_PATH(filefullpath=fullfn, filename=filename, website="", tags=tags, annotation=annotation))
 
             return _ret_eagle_list
 
         def on_click_btn_send_to_eagle(
             chk_search_image_file_recursive, txt_target_images_dir,
             chk_save_generationinfo_to_eagle_as_annotation, chk_save_positive_prompt_to_eagle_as_tags,
-            radio_save_negative_prompt_to_eagle_as, txt_save_to_eagle_folderid):
+            radio_save_negative_prompt_to_eagle_as, txt_destination_eagle_folder,
+            radio_allow_create_new_folder):
+
+            _ret_html = ""
+
             # check Eagle
-            _ret = info.info()
+            _ret = api_application.info()
             try:
                 _ret.raise_for_status()
             except Exception as e:
@@ -218,20 +229,48 @@ def on_ui_tabs():
                 print(_ret.status_code)
                 return [gr.update(value=_error_mes)]
 
+            # Find target folder
+            _eagle_folderid = ""
+            if txt_destination_eagle_folder and txt_destination_eagle_folder !="":
+                _ret_folder_list = api_folder.list()
+
+                # serach by name
+                _ret = api_util.findFolderByName(_ret_folder_list, txt_destination_eagle_folder)
+                if _ret and len(_ret) > 0:
+                    _eagle_folderid = _ret.get("id", "")
+                # serach by ID
+                if _eagle_folderid == "":
+                    _ret = api_util.findFolderByID(_ret_folder_list, txt_destination_eagle_folder)
+                    if _ret and len(_ret) > 0:
+                        _eagle_folderid = _ret.get("id", "")
+                if _eagle_folderid == "":
+                    if radio_allow_create_new_folder == 0: # forbid
+                        _ret_html += f"<p>folder not found. folder creation is not allowed. Foldername/ID is ignored.</p>"
+                    elif radio_allow_create_new_folder == 1: # allow new
+                        _ret_html += f"<p>New folder created. [{txt_destination_eagle_folder}]</p>"
+                        _r_get = api_folder.create(txt_destination_eagle_folder)
+                        try:
+                            _eagle_folderid = _r_get.json().get("data").get("id")
+                        except:
+                            _eagle_folderid = ""
+
             _images, _len = _get_images(txt_target_images_dir, chk_search_image_file_recursive)
             _params = _get_EAGLE_ITEM_list(
                 _images, chk_save_generationinfo_to_eagle_as_annotation,
                 chk_save_positive_prompt_to_eagle_as_tags, radio_save_negative_prompt_to_eagle_as)
-            _ret = addFromPaths.add_from_paths(_params, step=10, folderId=txt_save_to_eagle_folderid)
-            _ret_html = ""
-            for x in _ret:
-                _ret_html += f"<div>{x}</div>"
-            return [gr.update(value=_ret_html)]
+            _ret = api_item.add_from_paths(_params, step=MAX_ITEM_IN_ONE_POST_ADDFROMPATHS, folderId=_eagle_folderid)
+
+            _ret_html += f"<p>Send {_len} images to Eagle.</p>"
+            _ret_html += "<p>"
+            _ret_html += ", ".join([x.get("status", "") for x in _ret])
+            _ret_html += "</p>"
+            return gr.update(value=_ret_html)
         btn_send_to_eagle.click(
             fn=on_click_btn_send_to_eagle,
             inputs=[chk_search_image_file_recursive, txt_target_images_dir,
                     chk_save_generationinfo_to_eagle_as_annotation, chk_save_positive_prompt_to_eagle_as_tags,
-                    radio_save_negative_prompt_to_eagle_as, txt_save_to_eagle_folderid],
+                    radio_save_negative_prompt_to_eagle_as, txt_destination_eagle_folder,
+                    radio_allow_create_new_folder],
             outputs=[html_current_status]
         )
 

@@ -1,19 +1,20 @@
+# seealso: https://api.eagle.cool/item/add-from-path
 # seealso: https://api.eagle.cool/item/add-from-paths
 #
 import requests
 import os
 
 
-class EAGLE_ITEM ():
+class EAGLE_ITEM_PATH:
     def __init__(self, filefullpath, filename="", website="", tags:list=[], annotation=""):
-        """_summary_
+        """Data container for addFromPath, addFromPaths
 
         Args:
-            filefullpath (_type_): _description_
-            filename (str, optional): _description_. Defaults to "".
-            website (str, optional): _description_. Defaults to "".
-            tags (list, optional): _description_. Defaults to [].
-            annotation (str, optional): _description_. Defaults to "".
+            filefullpath : Required, full path of the local files.
+            filename     : (option), name of image to be added.
+            website      : (option), address of the source of the image.
+            tags (list)  : (option), tags for the image.
+            annotation   : (option), annotation for the image.
         """
         self.filefullpath = filefullpath
         self.filename = filename
@@ -34,8 +35,11 @@ class EAGLE_ITEM ():
             _data.update({"annotation": self.annotation})
         return _data
 
-def add_from_paths(files:list[EAGLE_ITEM], folderId=None, server_url="http://localhost", port=41595, step=None):
+
+def add_from_paths(files:list[EAGLE_ITEM_PATH], folderId=None, server_url="http://localhost", port=41595, step=None):
     """EAGLE API:/api/item/addFromPaths
+
+    Method: POST
 
     Args:
         path: Required, the path of the local files.
@@ -47,10 +51,12 @@ def add_from_paths(files:list[EAGLE_ITEM], folderId=None, server_url="http://loc
         step: interval image num of doing POST. Defaults is None (disabled)
 
     Returns:
-        Response: return of requests.post
+        Response: return of requests.posts
     """
-    step = int(step)
     API_URL = f"{server_url}:{port}/api/item/addFromPaths"
+
+    if step:
+        step = int(step)
 
     def _init_data():
         _data = {"items": []}
@@ -61,14 +67,23 @@ def add_from_paths(files:list[EAGLE_ITEM], folderId=None, server_url="http://loc
     r_posts = []
     data = _init_data()
     for _index, _item in enumerate(files):
+        _item:EAGLE_ITEM_PATH = _item
         _data = _item.output_data()
         if _data:
             data["items"].append(_data)
         if step and step > 0:
-            if (_index - (_index // step) * step) == 0:
-                r_posts += requests.post(API_URL, json=data)
+            if ((_index + 1) - ((_index + 1) // step) * step) == 0:
+                _ret = requests.post(API_URL, json=data)
+                try:
+                    r_posts.append(_ret.json())
+                except:
+                    r_posts.append(_ret)
                 data = _init_data()
     if (len(data["items"]) > 0) or (not step or step <= 0):
-        r_posts += requests.post(API_URL, json=data)
+        _ret = requests.post(API_URL, json=data)
+        try:
+            r_posts.append(_ret.json())
+        except:
+            r_posts.append(_ret)
 
-    return r_posts
+    return [ x for x in r_posts if x != "" ]

@@ -24,14 +24,19 @@
 
 ## About Settings
 
+### UI / Load Settings
+
 | UI / Load Settings              | ![](misc/ss04.png)                                                    |
 | ------------------------------- | --------------------------------------------------------------------- |
 | Search image file recursively   | Search images under "Target Images Directory", include sub-directory. |
 | Show searched images in gallery |                                                                       |
 
-| Output Settings                       | ![](misc/ss05.png)                                                                                                                                                                  |
+### Output Settings
+
+| Output Settings                       | ![](misc/ss11.png)                                                                                                                                                                  |
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FolderID on Eagle                     | (option)<br/>Select folder on Eagle by ID.                                                                                                                                          |
 | Save Generation info as Annotation    | Register PNGinfo like 3line generation info to "memo" on Eagle.                                                                                                                     |
 | Save positive prompt to Eagle as tags | Register prompt as "tag" on Eagle.                                                                                                                                                  |
 | Save negative prompt to Eagle as      | Register negative prompt as "tag" on Eagle<br/>None: disabled<br/>tag: register normal style. i.e.) "bad anatomy"<br/>n:tag : Register tag with "n:" on head. i.e.) "n:bad anatomy" |
+| FolderID on Eagle                     | (option)<br/>Select folder on Eagle by ID.                                                                                                                                          |
+| Allow create new folder               | If "allow", create new folder on Eagle when supplied foldername is not exists.                                                                                                      |

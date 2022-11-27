@@ -29,14 +29,19 @@
 
 ## 設定
 
+### 画面 / 読込設定
+
 | UI / Load Settings              | ![](misc/ss04.png)                                            |
 | ------------------------------- | ------------------------------------------------------------- |
 | Search image file recursively   | Target Images Directory で指定されたフォルダ以下について、サブディレクトリを含めて画像を検索します |
 | Show searched images in gallery | 検索して見つけた画像ファイルを、画面下部のギャラリーに表示します                              |
 
-| Output Settings                       | ![](misc/ss05.png)                                                                                                              |
+### 出力設定
+
+| Output Settings                       | ![](misc/ss11.png)                                                                                                              |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| FolderID on Eagle                     | (option: 必須ではありません)<br/>画像を登録する Eagle 側のフォルダID を指定できます                                                                          |
 | Save Generation info as Annotation    | PNGinfo に表示されるような、3行からなる生成情報を、Eagle の メモ欄に登録します                                                                                 |
 | Save positive prompt to Eagle as tags | プロンプトを Eagle の tag として登録します                                                                                                     |
 | Save negative prompt to Eagle as      | ネガティブプロンプトを Eagle の tag として登録します<br/>None: 登録しません<br/>tag: 登録します<br/>n:tag 登録します。登録時、タグ名の頭に "n:" をつけ、通常のプロンプトの tag と判別できるようにします |
+| FolderID on Eagle                     | (option: 必須ではありません)<br/>画像を登録する Eagle 側のフォルダID を指定できます                                                                          |
+| Allow create new folder               | 指定された名前のフォルダが Eagle に存在しない場合に、新しくフォルダを作成するかを設定できます                                                                              |

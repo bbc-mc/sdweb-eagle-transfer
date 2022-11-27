@@ -11,6 +11,6 @@ def info(server_url="http://localhost", port=41595):
 
     API_URL = f"{server_url}:{port}/api/application/info"
 
-    res = requests.get(API_URL)
+    r_get = requests.get(API_URL)
 
-    return res
+    return r_get
