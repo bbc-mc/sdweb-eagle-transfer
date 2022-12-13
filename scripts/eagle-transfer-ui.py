@@ -12,11 +12,16 @@ from scripts.eagleapi import api_application
 from scripts.eagleapi import api_folder
 from scripts.eagleapi import api_item
 from scripts.eagleapi import api_util
+from scripts.tag_generator import TagGenerator
 
 # Define
 Image.MAX_IMAGE_PIXELS = 1000000000
 DEBUG = False
 MAX_ITEM_IN_ONE_POST_ADDFROMPATHS = 10
+
+def dprint(str):
+    if DEBUG:
+        print(str)
 
 #
 # UI callback
@@ -48,6 +53,10 @@ def on_ui_tabs():
                         txt_destination_eagle_folder = gr.Text(label="Destination Folder Name or ID on Eagle (option)")
                         # radio: about folder
                         radio_allow_create_new_folder = gr.Radio(label="Allow create new folder on Eagle", choices=["Not allow", "allow"], value="Not allow", type="index")
+                        # additinal tagging
+                        txt_additional_tagging = gr.Text(label="Additional Tagging setting")
+                        # Eagle server URL
+                        txt_eagle_server_url_port = gr.Text(label="Eagle Server URL:Port", value="http://localhost:41595")
 
                     with gr.Group():
                         # Hidden items
@@ -180,7 +189,8 @@ def on_ui_tabs():
             _image_paths,
             chk_save_generationinfo_to_eagle_as_annotation,
             chk_save_positive_prompt_to_eagle_as_tags,
-            radio_save_negative_prompt_to_eagle_as
+            radio_save_negative_prompt_to_eagle_as,
+            txt_additional_tagging
             ):
             _ret_eagle_list = []
 
@@ -206,6 +216,12 @@ def on_ui_tabs():
                     tags += [ x.strip() for x in neg_prompt.split(",") if x.strip() != "" ]
                 elif radio_save_negative_prompt_to_eagle_as == "n:tag":
                     tags += [ f"n:{x.strip()}" for x in neg_prompt.split(",") if x.strip() != "" ]
+                # tags for Generation info values
+                if txt_additional_tagging and txt_additional_tagging != "":
+                    gen = TagGenerator()
+                    _tags = gen.generate_from_geninfo(txt_additional_tagging, info)
+                    if _tags and len(_tags) > 0:
+                        tags += _tags
                 _ret_eagle_list.append(api_item.EAGLE_ITEM_PATH(filefullpath=fullfn, filename=filename, website="", tags=tags, annotation=annotation))
 
             return _ret_eagle_list
@@ -214,12 +230,22 @@ def on_ui_tabs():
             chk_search_image_file_recursive, txt_target_images_dir,
             chk_save_generationinfo_to_eagle_as_annotation, chk_save_positive_prompt_to_eagle_as_tags,
             radio_save_negative_prompt_to_eagle_as, txt_destination_eagle_folder,
-            radio_allow_create_new_folder):
+            radio_allow_create_new_folder,
+            txt_additional_tagging, txt_eagle_server_url_port
+            ):
 
             _ret_html = ""
 
+            if txt_eagle_server_url_port != "" and api_application.is_valid_url_port(txt_eagle_server_url_port):
+                server_url, port = api_util.get_url_port(txt_eagle_server_url_port)
+            else:
+                _error_mes = "Warning: api_application.is_valid_url_port: failed. set as default='http://localhost:41595'"
+                print(_error_mes)
+                server_url = "http://localhost"
+                port = 41595
+
             # check Eagle
-            _ret = api_application.info()
+            _ret = api_application.info(server_url=server_url, port=port)
             try:
                 _ret.raise_for_status()
             except Exception as e:
@@ -230,39 +256,52 @@ def on_ui_tabs():
                 return [gr.update(value=_error_mes)]
 
             # Find target folder
-            _eagle_folderid = ""
-            if txt_destination_eagle_folder and txt_destination_eagle_folder !="":
-                _ret_folder_list = api_folder.list()
-
-                # serach by name
-                _ret = api_util.findFolderByName(_ret_folder_list, txt_destination_eagle_folder)
-                if _ret and len(_ret) > 0:
-                    _eagle_folderid = _ret.get("id", "")
-                # serach by ID
-                if _eagle_folderid == "":
-                    _ret = api_util.findFolderByID(_ret_folder_list, txt_destination_eagle_folder)
-                    if _ret and len(_ret) > 0:
-                        _eagle_folderid = _ret.get("id", "")
-                if _eagle_folderid == "":
-                    if radio_allow_create_new_folder == 0: # forbid
-                        _ret_html += f"<p>folder not found. folder creation is not allowed. Foldername/ID is ignored.</p>"
-                    elif radio_allow_create_new_folder == 1: # allow new
-                        _ret_html += f"<p>New folder created. [{txt_destination_eagle_folder}]</p>"
-                        _r_get = api_folder.create(txt_destination_eagle_folder)
-                        try:
-                            _eagle_folderid = _r_get.json().get("data").get("id")
-                        except:
-                            _eagle_folderid = ""
+            _eagle_folderid = api_util.find_or_create_folder(
+                txt_destination_eagle_folder,
+                allow_create_new_folder=radio_allow_create_new_folder,
+                server_url=server_url, port=port
+                )
 
             _images, _len = _get_images(txt_target_images_dir, chk_search_image_file_recursive)
             _params = _get_EAGLE_ITEM_list(
                 _images, chk_save_generationinfo_to_eagle_as_annotation,
-                chk_save_positive_prompt_to_eagle_as_tags, radio_save_negative_prompt_to_eagle_as)
-            _ret = api_item.add_from_paths(_params, step=MAX_ITEM_IN_ONE_POST_ADDFROMPATHS, folderId=_eagle_folderid)
+                chk_save_positive_prompt_to_eagle_as_tags, radio_save_negative_prompt_to_eagle_as,
+                txt_additional_tagging)
+
+            # Send to Eagle
+            if server_url != "http://localhost":
+                # send by URL
+                dprint(f"DEBUG: add_from_URL_base64")
+                _rets = []
+                for item_path in _params:
+                    item_path:api_item.EAGLE_ITEM_PATH = item_path
+                    item_url = api_item.EAGLE_ITEM_URL(
+                        url=item_path.filefullpath,
+                        name=item_path.filename,
+                        tags=item_path.tags,
+                        annotation=item_path.annotation)
+                    _ret = api_item.add_from_URL_base64(
+                        item_url,
+                        folderId=_eagle_folderid,
+                        server_url=server_url, port=port)
+                    _rets += [_ret]
+            else:
+                dprint(f"DEBUG: add_from_paths")
+                _rets = api_item.add_from_paths(
+                    _params,
+                    step=MAX_ITEM_IN_ONE_POST_ADDFROMPATHS,
+                    folderId=_eagle_folderid,
+                    server_url=server_url, port=port)
 
             _ret_html += f"<p>Send {_len} images to Eagle.</p>"
             _ret_html += "<p>"
-            _ret_html += ", ".join([x.get("status", "") for x in _ret])
+            _ret = []
+            for x in _rets:
+                if type(x) == dict:
+                    _ret += [f"{x.get('status', '')}" for x in _rets]
+                else:
+                    _ret += [f"{x.status_code}" for x in _rets]
+            _ret_html += ", ".join([x for x in _ret if x != ""])
             _ret_html += "</p>"
             return gr.update(value=_ret_html)
         btn_send_to_eagle.click(
@@ -270,7 +309,9 @@ def on_ui_tabs():
             inputs=[chk_search_image_file_recursive, txt_target_images_dir,
                     chk_save_generationinfo_to_eagle_as_annotation, chk_save_positive_prompt_to_eagle_as_tags,
                     radio_save_negative_prompt_to_eagle_as, txt_destination_eagle_folder,
-                    radio_allow_create_new_folder],
+                    radio_allow_create_new_folder,
+                    txt_additional_tagging, txt_eagle_server_url_port
+                    ],
             outputs=[html_current_status]
         )
 

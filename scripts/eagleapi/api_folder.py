@@ -5,7 +5,7 @@ import sys
 
 from . import api_util
 
-def create(newfoldername, server_url="http://localhost", port=41595, allow_duplicate_name=True):
+def create(newfoldername, server_url="http://localhost", port=41595, allow_duplicate_name=True, timeout_connect=3, timeout_read=10):
     """EAGLE API:/api/folder/list
 
     Method: POST
@@ -30,11 +30,28 @@ def create(newfoldername, server_url="http://localhost", port=41595, allow_dupli
             print(f"ERROR: create folder with same name is forbidden by option. [eagleapi.folder.create] foldername=\"{newfoldername}\"", file=sys.stderr)
             return
 
-    r_get = requests.post(API_URL, json=data)
-    return r_get
+    r_post = requests.post(API_URL, json=data, timeout=(timeout_connect, timeout_read))
+    return r_post
 
 
-def list(server_url="http://localhost", port=41595):
+def rename(folderId, newName, server_url="http://localhost", port=41595, timeout_connect=3, timeout_read=10):
+    """EAGLE API:/api/folder/rename
+
+    Method: POST
+
+    Returns:
+        list(response dict): return list of response.json()
+    """
+    data = {
+        "folderId": folderId,
+        "newName": newName
+    }
+    API_URL = f"{server_url}:{port}/api/folder/rename"
+    r_post = requests.post(API_URL, json=data, timeout=(timeout_connect, timeout_read))
+    return r_post
+
+
+def list(server_url="http://localhost", port=41595, timeout_connect=3, timeout_read=10):
     """EAGLE API:/api/folder/list
 
     Method: GET
@@ -45,6 +62,6 @@ def list(server_url="http://localhost", port=41595):
 
     API_URL = f"{server_url}:{port}/api/folder/list"
 
-    r_get = requests.get(API_URL)
+    r_get = requests.get(API_URL, timeout=(timeout_connect, timeout_read))
 
     return r_get
